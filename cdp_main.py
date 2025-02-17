@@ -4,13 +4,13 @@ from queue import Queue, Empty
 from threading import Thread
 import traceback
 
+from requests import Session
 from flask import Flask, request, jsonify
 from playwright.sync_api import sync_playwright
 from pathlib import Path
 
-
 app = Flask(__name__)
-
+session = Session()
 
 playwright_instance = None
 browser_instance = None
@@ -36,10 +36,10 @@ def after_request(response):
 def validate_mtag():
     mtag = request.headers.get("MTag")  # 获取请求头中的 MTag
     if not mtag or mtag != "Monster":  # 校验 MTag 是否存在且值为 "Monster"
-        return jsonify({"code": -1, "message":"未授权的请求"})
+        return jsonify({"code": -1, "message": "未授权的请求"})
 
 
-@ app.before_request
+@app.before_request
 def before_request_handler():
     error_response = validate_mtag()
     if error_response:  # 如果校验失败，返回错误响应
@@ -94,32 +94,35 @@ def get_available_browser():
                 print("Reconnect failed")
 
 
-@app.route('/upload_image', methods=['OPTIONS', 'POST'])
-def upload_image():
-    if request.method == 'OPTIONS':
-        # 处理预检请求（Preflight Request）
-        return '', 200
-    if (file := request.files.get('file')):
-        if file.filename.strip():
-            file_path = os.path.join(download_dir, file.filename)
-            if os.path.exists(file_path) and file_path.endswith(".jpg"):
-                os.remove(file_path)
-            file.save(file_path)
-    return jsonify({"message": "成功", "code": 0})
+def download_image(image_url, file_name):
+    try:
+        headers = {
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+        }
+        response = session.get(image_url, headers=headers, stream=True)
 
+        # 检查请求是否成功
+        if response.status_code == 200:
+            # 打开文件以二进制写入模式保存图片数据
+            with open(file_name, 'wb') as file:
+                for chunk in response.iter_content(1024):  # 分块写入文件
+                    file.write(chunk)
+            print(f"图片已成功下载并保存为 {file_name}")
+        else:
+            print(f"下载失败，HTTP 状态码: {response.status_code} {response.text}")
+
+    except Exception as e:
+        print(f"下载图片时出错: {e}")
 
 
 @app.route('/find_by_image', methods=['POST'])
 def find_by_image():
     data = request.get_json()
-    # username = data.get('username', None)
+    image_url = data.get('imgUrl', None)
     filename = data.get('filename', None)
 
     file_path = os.path.join(download_dir, filename)  # 替换为你的文件路径
-    # if not username:
-    #     return jsonify({"message": "无用户名，无法上传", "code": -1})
-    # if not os.path.exists(file_path):
-    #     return jsonify({"message": "找不到待识别图片", "code": -1})
+    download_image(image_url, file_path)
 
     url = "https://business.mhdyp.com/#/discharge/index"
     task_queue.put({

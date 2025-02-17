@@ -10,100 +10,58 @@
 // ==/UserScript==
 
 (function() {
-  'use strict';
+    'use strict';
 
-  function sendHttpRequest(method, url, data, onSuccess, onError) {
+function sendHttpRequest(method, url, data, onSuccess, onError) {
     GM_xmlhttpRequest({
-      method: method,
-      url: url,
-      headers: {
-        "Content-Type": "application/json",
-        "MTag": "Monster"
-      },
-      data: method === 'POST' ? JSON.stringify(data) : undefined,
-      onload: function(response) {
-        if (response.status >= 200 && response.status < 300) {
-          onSuccess(response.responseText);
-        } else {
-          if (onError) {
-            onError('请求失败，状态码: ' + response.status);
-          }
-        }
-      },
-      onerror: function(error) {
-        if (onError) {
-          onError('请求发生错误: ' + error);
-        }
-      }
-    });
-  }
-
-
-  async function sendImageToBackend(filename, imgUrl) {
-    try {
-      // 第一步：获取图片资源
-      const backendUrl = "http://localhost:5001/upload_image"
-      const response = await fetch(imgUrl);
-      if (!response.ok) {
-        createFlashMessage("下载图片失败", "error")
-        return
-      }
-
-      // 第二步：将响应转换为 Blob
-      const blob = await response.blob();
-
-      // 第三步：创建 FormData 对象并将 Blob 添加到其中
-      const formData = new FormData();
-      formData.append('file', blob, filename); // 'image.jpg' 是文件名，可以根据需要修改
-
-      // 第四步：将图片发送到后端
-      const uploadResponse = await fetch(backendUrl, {
+        method: method,
+        url: url,
         headers: {
-          "MTag": "Monster"
+            "Content-Type": "application/json",
+            "MTag": "Monster"
         },
-        method: 'POST',
-        body: formData
-      });
-
-      if (!uploadResponse.ok) {
-        createFlashMessage("图片上传失败", "error")
-      }
-
-      // 第五步：处理后端返回的结果
-      const result = await uploadResponse.json(); // 假设后端返回 JSON 数据
-      if (result.code !== 0) {
-        createFlashMessage(`错误:${result.message}`, "error")
-      }
-      return result;
-    } catch (error) {
-      console.error("上传失败:", error.message);
-      return Promise.reject(error.message);
-    }
-  }
+        data: method === 'POST' ? JSON.stringify(data) : undefined,
+        onload: function(response) {
+            if (response.status >= 200 && response.status < 300) {
+                onSuccess(response.responseText);
+            } else {
+                if (onError) {
+                    onError('请求失败，状态码: ' + response.status);
+                }
+            }
+        },
+        onerror: function(error) {
+            if (onError) {
+                onError('请求发生错误: ' + error);
+            }
+        }
+    });
+}
 
 
-  function createAndAppendElement(tag, attributes, styles) {
+function createAndAppendElement(tag, attributes, styles) {
     var element = document.createElement(tag);
     for (var attr in attributes) {
-      element[attr] = attributes[attr];
+        element[attr] = attributes[attr];
     }
     for (var style in styles) {
-      element.style[style] = styles[style];
+        element.style[style] = styles[style];
     }
     document.body.appendChild(element);
     return element;
-  }
+}
 
 
-  function sendImage2Monster(username, filename, desc) {
+function sendImage2Monster(username, imgUrl, filename) {
     const url = "http://localhost:5001/find_by_image"
     const data = {
-      "username": username,
-      "filename": filename,
+        "username": username,
+        "filename": filename,
+        "imgUrl": imgUrl
     }
     sendHttpRequest('POST', url, data,
-                    function(responseText) {
-                      var jsonRet = JSON.parse(responseText);
+        function(responseText) {
+            var jsonRet = JSON.parse(responseText);
             var code = jsonRet.code
             if (code !== 0) {
                 createFlashMessage(`错误:${jsonRet.message}`, "error")
@@ -239,26 +197,22 @@ function createFlashMessage(message, type = "success", duration = 1500) {
         sendImgButton.style.top = `${event.clientY - 80}px`; // 调整位置以避免覆盖原生菜单
         sendImgButton.style.left = `${event.clientX + 100}px`;
         sendImgButton.style.zIndex = '1000';
-        const img_url = target.src
+        const imgUrl = target.src
         sendImgButton.onclick = async function() {
             const e = document.querySelector('div.chat-header.tui-chat-header > div.chat-header-container > div.chat-header-content > div:nth-child(1) > span:nth-child(1)');
-            const username = e.textContent
+            let username = e.textContent
+            if ("粉丝未设置昵称" === username) {
+                username = document.querySelector('div.chat-header.tui-chat-header > div.chat-header-container > div.chat-header-content > div:nth-child(1) > span:nth-child(2)')
+                    .textContent.replace("ID:", "")
+            }
             const filename = `${username}-${getDatetime()}.jpg`
-            try {
-                // 使用 await 等待 performDownload 完成
-                await sendImageToBackend(filename, img_url);
-                sendImage2Monster(username, filename);
-                if (sendImgButton != null) {
-                    document.body.removeChild(sendImgButton); // 关闭自定义菜单
-                    sendImgButton = null
-                }
-                createFlashMessage("提交成功", "success")
-            } catch (error) {
+            // 使用 await 等待 performDownload 完成
+            sendImage2Monster(username, imgUrl, filename);
+            if (sendImgButton != null) {
                 document.body.removeChild(sendImgButton); // 关闭自定义菜单
                 sendImgButton = null
-                createFlashMessage(error, "error")
-                console.error("Error occurred:", error);
             }
+            createFlashMessage("提交成功", "success")
         }
 
         // 添加到页面
@@ -299,6 +253,5 @@ function createFlashMessage(message, type = "success", duration = 1500) {
         if (result) return result; // 如果找到 img，返回
     }
     return null; // 没有找到 img，返回 null
-}
 
 })();
